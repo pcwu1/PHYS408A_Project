@@ -1,2 +1,0 @@
-# This simulation was built upon a template called "ch05_01_simple-animation.html" in the book "Real-Time 3D Graphics with WebGL 2nd Edition" by Farhad Ghayour and Diego Cantor 
-# Book link: https://www.amazon.com/dp/1788629698
