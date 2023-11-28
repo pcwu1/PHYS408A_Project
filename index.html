@@ -350,7 +350,7 @@
 
     // GUI that adds sliders and buttons
     function initControls() {
-      const gui = new dat.GUI({ width: 600 });
+      const gui = new dat.GUI();
 
       const controls = {
         'Position X': spherePositionX,
@@ -383,18 +383,12 @@
           spherePositionX = 0; 
           spherePositionY = 0; 
           spherePositionZ = 0; 
-          dxSphere = 0;
-          dySphere = 0;
-          dzSphere = 0;
 
-          const guiControls = gui.__controllers; 
-          guiControls.forEach(control => {
+          const controllers = Object.values(gui.__controllers);
+          controllers.forEach(control => {
               if (control.property === 'Position X') control.setValue(spherePositionX);
               else if (control.property === 'Position Y') control.setValue(spherePositionY);
               else if (control.property === 'Position Z') control.setValue(spherePositionZ);
-              else if (control.property === 'Change in X (dx/dt)') control.setValue(dxSphere);
-              else if (control.property === 'Change in Y (dy/dt)') control.setValue(dySphere);
-              else if (control.property === 'Change in Z (dz/dt)') control.setValue(dzSphere);
           });
       }
 
