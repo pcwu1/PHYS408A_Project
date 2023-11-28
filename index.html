@@ -4,7 +4,7 @@
   <title>Visualization of E-Field</title>
 
   <!-- libraries -->
-  <link rel="stylesheet" href="./common/lib/normalize.css">
+  <link rel="stylesheet" href="../common/lib/normalize.css">
   <script type="text/javascript" src="./common/lib/gl-matrix.js"></script>
   <script type="text/javascript" src="./common/lib/dat.gui.js"></script>
 
@@ -127,10 +127,6 @@
       gl, scene, program, camera, transforms,
       elapsedTime, initialTime,
       fixedLight = false,
-      dxSphere = 0.0,
-      dySphere = 0.0,
-      dzSphere = 0.0,
-      dxCone = 0.0,
       spherePositionX = 0,
       spherePositionY = 0,
       spherePositionZ = 0,
@@ -320,17 +316,6 @@
 
     // Update object positions
     function animate() {
-      spherePositionX += dxSphere;
-      spherePositionY += dySphere;
-      spherePositionZ += dzSphere;
-
-      if ((spherePositionX >= 50 || spherePositionX <= -50) ||
-           (spherePositionY >= 50 || spherePositionY <= -50) ||
-           (spherePositionZ >= 50 || spherePositionZ <= -50)) {
-          dxSphere = -dxSphere;
-          dySphere = -dySphere;
-          dzSphere = -dzSphere;
-      }
 
       draw();
     }
@@ -367,21 +352,10 @@
     function initControls() {
       const gui = new dat.GUI({ width: 600 });
 
-      let tempdx;
-      let tempdy;
-      let tempdz;
-      let stopped = false;
-      
-
       const controls = {
         'Position X': spherePositionX,
         'Position Y': spherePositionY,
         'Position Z': spherePositionZ,
-        'Change in X (dx/dt)': dxSphere,
-        'Change in Y (dy/dt)': dySphere,
-        'Change in Z (dz/dt)': dzSphere,
-        'Stop Movement': stopMovement,
-        'Resume Movement': resumeMovement,
         'Reset Settings': resetValues,
         'Reset Camera': resetCamera
       };
@@ -401,58 +375,9 @@
           draw();
       });
 
-      gui.add(controls, 'Change in X (dx/dt)', -1, 1).step(0.1).onChange(value => {
-          dxSphere = value;
-      });
-
-      gui.add(controls, 'Change in Y (dy/dt)', -1, 1).step(0.1).onChange(value => {
-          dySphere = value;
-      });
-
-      gui.add(controls, 'Change in Z (dz/dt)', -1, 1).step(0.1).onChange(value => {
-          dzSphere = value;
-      });
-
-      gui.add(controls, 'Stop Movement'); 
-
-      gui.add(controls, 'Resume Movement'); 
-
       gui.add(controls, 'Reset Settings'); 
 
       gui.add(controls, 'Reset Camera'); 
-
-      function stopMovement() {
-        if (stopped == false) {
-          tempdx = dxSphere;
-          tempdy = dySphere;
-          tempdz = dzSphere;
-          dxSphere = 0;
-          dySphere = 0;
-          dzSphere = 0;
-          const guiControls = gui.__controllers; 
-          guiControls.forEach(control => {
-              if (control.property === 'Change in X (dx/dt)') control.setValue(dxSphere);
-              else if (control.property === 'Change in Y (dy/dt)') control.setValue(dySphere);
-              else if (control.property === 'Change in Z (dz/dt)') control.setValue(dzSphere);
-          });
-          stopped = true;
-        }
-      }
-
-      function resumeMovement() {
-        if (stopped == true) {
-          dxSphere = tempdx;
-          dySphere = tempdy;
-          dzSphere = tempdz;
-          const guiControls = gui.__controllers; 
-          guiControls.forEach(control => {
-              if (control.property === 'Change in X (dx/dt)') control.setValue(dxSphere);
-              else if (control.property === 'Change in Y (dy/dt)') control.setValue(dySphere);
-              else if (control.property === 'Change in Z (dz/dt)') control.setValue(dzSphere);
-          }); 
-          stopped = false;
-        }
-      }
 
       function resetValues() {
           spherePositionX = 0; 
