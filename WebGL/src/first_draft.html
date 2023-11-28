@@ -1,0 +1,493 @@
+<html>
+
+<head>
+  <title>Visualization of E-Field</title>
+
+  <!-- libraries -->
+  <link rel="stylesheet" href="../common/lib/normalize.css">
+  <script type="text/javascript" src="../common/lib/gl-matrix.js"></script>
+  <script type="text/javascript" src="../common/lib/dat.gui.js"></script>
+
+  <!-- modules -->
+  <script type="text/javascript" src="../common/js/utils.js"></script>
+  <script type="text/javascript" src="../common/js/Program.js"></script>
+  <script type="text/javascript" src="../common/js/Scene.js"></script>
+  <script type="text/javascript" src="../common/js/Axis.js"></script>
+
+  <script type="text/javascript" src="../common/js/Camera.js"></script>
+  <script type="text/javascript" src="../common/js/Controls.js"></script>
+  <script type="text/javascript" src="../common/js/Transforms.js"></script>
+
+  <script type="text/javascript" src="../common/js/Cone.js"></script>
+  <script type="text/javascript" src="../common/js/Sphere.js"></script>
+  <script type="text/javascript" src="../common/js/Cube.js"></script>
+  <script type="text/javascript" src="../common/js/Xaxis.js"></script>
+  <script type="text/javascript" src="../common/js/Yaxis.js"></script>
+  <script type="text/javascript" src="../common/js/Zaxis.js"></script>
+
+  <!-- Vertex Shader -->
+  <script id="vertex-shader" type="x-shader/x-vertex">
+    #version 300 es
+    precision mediump float;
+
+    uniform mat4 uModelViewMatrix;
+    uniform mat4 uProjectionMatrix;
+    uniform mat4 uNormalMatrix;
+    uniform vec3 uLightPosition;
+    uniform vec4 uMaterialDiffuse;
+    uniform bool uWireframe;
+    uniform bool uUpdateLight;
+
+    in vec3 aVertexPosition;
+    in vec3 aVertexNormal;
+    in vec4 aVertexColor;
+
+    out vec3 vNormal;
+    out vec3 vLightRay;
+    out vec3 vEyeVector;
+    out vec4 vFinalColor;
+
+    void main(void) {
+      // If wireframe is enabled, set color to the diffuse property exclusing lights
+      if (uWireframe) {
+        vFinalColor = uMaterialDiffuse;
+      }
+
+      vec4 vertex = uModelViewMatrix * vec4(aVertexPosition, 1.0);
+      vec4 light = vec4(uLightPosition,1.0);
+
+      // If true, then ensure that light position
+      // is appropruately updated
+      if (uUpdateLight) {
+        light = uModelViewMatrix * vec4(uLightPosition,1.0);
+      }
+
+      vNormal = vec3(uNormalMatrix * vec4(aVertexNormal, 1.0));
+      vLightRay = vertex.xyz-light.xyz;
+      vEyeVector = -vec3(vertex.xyz);
+      gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aVertexPosition, 1.0);
+    }
+  </script>
+
+  <!-- Fragment Shader -->
+  <script id="fragment-shader" type="x-shader/x-fragment">
+    #version 300 es
+    precision mediump float;
+
+    uniform bool uWireframe;
+    uniform vec4 uLightAmbient;
+    uniform vec4 uLightDiffuse;
+    uniform vec4 uLightSpecular;
+    uniform vec4 uMaterialAmbient;
+    uniform vec4 uMaterialDiffuse;
+    uniform vec4 uMaterialSpecular;
+    uniform float uShininess;
+
+    in vec3 vNormal;
+    in vec3 vLightRay;
+    in vec3 vEyeVector;
+    in vec4 vFinalColor;
+
+    out vec4 fragColor;
+
+    void main(void) {
+      if (uWireframe) {
+        fragColor = vFinalColor;
+      }
+      else {
+        vec3 L = normalize(vLightRay);
+        vec3 N = normalize(vNormal);
+
+        float lambertTerm = dot(N, -L);
+
+        // Ambient
+        vec4 Ia = uLightAmbient * uMaterialAmbient;
+        // Diffuse
+        vec4 Id = vec4(0.0, 0.0, 0.0, 1.0);
+        // Specular
+        vec4 Is = vec4(0.0, 0.0, 0.0, 1.0);
+
+        if (lambertTerm > 0.0) {
+          Id = uLightDiffuse * uMaterialDiffuse * lambertTerm;
+          vec3 E = normalize(vEyeVector);
+          vec3 R = reflect(L, N);
+          float specular = pow( max(dot(R, E), 0.0), uShininess);
+          Is = uLightSpecular * uMaterialSpecular * specular;
+        }
+
+        fragColor = vec4(vec3(Ia + Id + Is), 1.0);
+      }
+    }
+  </script>
+
+  <script type="text/javascript">
+    'use strict';
+
+    let
+      gl, scene, program, camera, transforms,
+      elapsedTime, initialTime,
+      fixedLight = false,
+      dxSphere = 0.0,
+      dySphere = 0.0,
+      dzSphere = 0.0,
+      dxCone = 0.0,
+      spherePositionX = 0,
+      spherePositionY = 0,
+      spherePositionZ = 0,
+      conePositionX = 0,
+      conePositionY = 0,
+      conePositionZ = 0,
+      frequency = 5;
+    
+    function configure() {
+      // Configure `canvas`
+      const canvas = utils.getCanvas('webgl-canvas');
+      utils.autoResizeCanvas(canvas);
+
+      // Configure `gl`
+      gl = utils.getGLContext(canvas);
+      gl.clearColor(0.9, 0.9, 0.9, 1);
+      gl.clearDepth(100);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+
+      // Configure `program`
+      program = new Program(gl, 'vertex-shader', 'fragment-shader');
+
+      const uniforms = [
+        'uProjectionMatrix',
+        'uModelViewMatrix',
+        'uNormalMatrix',
+        'uMaterialDiffuse',
+        'uMaterialAmbient',
+        'uMaterialSpecular',
+        'uLightAmbient',
+        'uLightDiffuse',
+        'uLightSpecular',
+        'uLightPosition',
+        'uShininess',
+        'uUpdateLight',
+        'uWireframe'
+      ];
+
+      const attributes = [
+        'aVertexPosition',
+        'aVertexNormal',
+        'aVertexColor',
+      ];
+
+      // Load attributes and uniforms
+      program.load(attributes, uniforms);
+
+      // Configure `scene`
+      scene = new Scene(gl, program);
+
+      // Configure `camera` and `controls`
+      camera = new Camera(Camera.ORBITING_TYPE);
+      camera.goHome([0, 2, 50]);
+      camera.setFocus([0, 0, 0]);
+      new Controls(camera, canvas);
+
+      // Configure `transforms`
+      transforms = new Transforms(gl, program, camera, canvas);
+
+      gl.uniform3fv(program.uLightPosition, [0, 120, 120]);
+      gl.uniform4fv(program.uLightAmbient, [0.8, 0.8, 0.8, 1]);
+      gl.uniform4fv(program.uLightDiffuse, [1, 1, 1, 1]);
+      gl.uniform4fv(program.uLightSpecular, [1, 1, 1, 1]);
+      gl.uniform1f(program.uShininess, 230);
+    }
+
+    // Load objects into our scene
+    function load() {
+        scene.add(new Cube(100));
+        scene.add(new Axis(50));
+        scene.add(new Xaxis(50));
+        scene.add(new Yaxis(50));
+        scene.add(new Zaxis(50));
+        scene.add(new Sphere());
+
+        for (let i = -50; i < 50; i+=5) {
+          for (let j = -50; j < 50; j+=5) {
+            for (let k = -50; k < 50; k+=5) {
+              scene.add(new Cone([i, j ,k]));
+            }
+          }
+        }
+    }
+
+    // Draws all the items in our scene on to the canvas
+    function draw() {
+      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      transforms.updatePerspective();
+
+      try {
+        gl.uniform1i(program.uUpdateLight, fixedLight);
+
+        // Iterate over every object in the scene
+        scene.traverse(object => {
+          // Calculate local transformations
+          transforms.calculateModelView();
+          transforms.push();
+
+          // Scale the cube
+          const scaleFactor = 100.0;
+          if (object.alias === 'cube') {
+            for (let i = 0; i < object.vertices.length; i++) {
+                object.vertices[i] *= scaleFactor;
+            }
+          }
+
+          // Depending on which object, apply transformation
+          if (object.alias === 'sphere') {
+            const sphereTransform = transforms.modelViewMatrix;
+            mat4.translate(sphereTransform, sphereTransform, [spherePositionX, spherePositionY, spherePositionZ]);
+            mat4.scale(sphereTransform, sphereTransform, [0.05, 0.05, 0.05]);  
+          }
+          else if (object.alias === 'cone') {
+            const coneTransform = transforms.modelViewMatrix;
+
+            // Calculate the direction the cone is pointing to
+            let sphereLocation = vec3.fromValues(spherePositionX, spherePositionY, spherePositionZ);
+            let coneLocation = vec3.fromValues(object.positions[0], object.positions[1], object.positions[2]);
+            const coneDirection = vec3.fromValues(0, 1, 0);
+            const direction = vec3.subtract(vec3.create(), sphereLocation, coneLocation);
+            vec3.normalize(direction, direction);
+
+            // Calculate the axis to rotate the cone
+            // Edge case: where the direction is same as original coneDirection
+            // cross product would be zero, so set it to (1, 0, 0) instead
+            let axis;
+            if (direction[0] == 0 && direction[1] == -1 && direction[2] == 0) {
+                axis = vec3.fromValues(1, 0, 0);
+            } else {
+                axis = vec3.cross(vec3.create(), coneDirection, direction);
+            }
+
+            // Calculate the angle and rotation matrix
+            const angle = Math.acos(vec3.dot(coneDirection, direction));
+            const rotationMatrix = mat4.create();
+
+            // Translates the origin to the cone's location
+            mat4.translate(coneTransform, coneTransform, [object.positions[0], object.positions[1], object.positions[2]]); 
+
+            // Scale the cone based on the distance squared from the sphere
+            let dist = Math.sqrt(Math.pow(object.positions[0] - spherePositionX, 2) + Math.pow(object.positions[1] - spherePositionY, 2) + Math.pow(object.positions[2] - spherePositionZ, 2));
+            if (dist < 7) {
+                mat4.scale(coneTransform, coneTransform, [0, 0, 0]);  
+            } else {
+                mat4.scale(coneTransform, coneTransform, [50/(dist*dist), 50/(dist*dist), 50/(dist*dist)]);  
+            }
+
+            // Rotate the cone and translate the origin back
+            mat4.rotate(coneTransform, coneTransform, angle, axis);
+            mat4.translate(coneTransform, coneTransform, [-object.positions[0], -object.positions[1], -object.positions[2]]);
+          }
+
+          transforms.setMatrixUniforms();
+          transforms.pop();
+
+          gl.uniform4fv(program.uMaterialDiffuse, object.diffuse);
+          gl.uniform4fv(program.uMaterialSpecular, object.specular);
+          gl.uniform4fv(program.uMaterialAmbient, object.ambient);
+          gl.uniform1i(program.uWireframe, object.wireframe);
+
+          // Bind
+          gl.bindVertexArray(object.vao);
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, object.ibo);
+
+
+          // Draw
+          if (object.wireframe) {
+            gl.drawElements(gl.LINES, object.indices.length, gl.UNSIGNED_SHORT, 0);
+          }
+          else {
+            gl.drawElements(gl.TRIANGLES, object.indices.length, gl.UNSIGNED_SHORT, 0);
+          }
+
+          // Clean
+          gl.bindVertexArray(null);
+          gl.bindBuffer(gl.ARRAY_BUFFER, null);
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+        });
+      }
+      catch (error) {
+        console.error(error);
+      }
+    }
+
+    // Update object positions
+    function animate() {
+      spherePositionX += dxSphere;
+      spherePositionY += dySphere;
+      spherePositionZ += dzSphere;
+
+      if ((spherePositionX >= 50 || spherePositionX <= -50) ||
+           (spherePositionY >= 50 || spherePositionY <= -50) ||
+           (spherePositionZ >= 50 || spherePositionZ <= -50)) {
+          dxSphere = -dxSphere;
+          dySphere = -dySphere;
+          dzSphere = -dzSphere;
+      }
+
+      draw();
+    }
+
+    function onFrame() {
+      elapsedTime = (new Date).getTime() - initialTime;
+      if (elapsedTime < frequency) return;
+
+      let steps = Math.floor(elapsedTime / frequency);
+      while (steps > 0) {
+        animate();
+        steps -= 1;
+      }
+
+      initialTime = (new Date).getTime();
+    }
+
+    function render() {
+      initialTime = new Date().getTime();
+      setInterval(onFrame, frequency / 1000);
+    }
+
+    function init() {
+        configure();
+        load();
+
+        render();
+        initControls();
+    }
+
+    window.onload = init;
+
+    // GUI that adds sliders and buttons
+    function initControls() {
+      const gui = new dat.GUI({ width: 600 });
+
+      let tempdx;
+      let tempdy;
+      let tempdz;
+      let stopped = false;
+      
+
+      const controls = {
+        'Position X': spherePositionX,
+        'Position Y': spherePositionY,
+        'Position Z': spherePositionZ,
+        'Change in X (dx/dt)': dxSphere,
+        'Change in Y (dy/dt)': dySphere,
+        'Change in Z (dz/dt)': dzSphere,
+        'Stop Movement': stopMovement,
+        'Resume Movement': resumeMovement,
+        'Reset Settings': resetValues,
+        'Reset Camera': resetCamera
+      };
+
+      gui.add(controls, 'Position X', -50, 50).step(1).onChange(value => {
+          spherePositionX = value;
+          draw();
+      });
+
+      gui.add(controls, 'Position Y', -50, 50).step(1).onChange(value => {
+          spherePositionY = value;
+          draw();
+      });
+
+      gui.add(controls, 'Position Z', -50, 50).step(1).onChange(value => {
+          spherePositionZ = value;
+          draw();
+      });
+
+      gui.add(controls, 'Change in X (dx/dt)', -1, 1).step(0.1).onChange(value => {
+          dxSphere = value;
+      });
+
+      gui.add(controls, 'Change in Y (dy/dt)', -1, 1).step(0.1).onChange(value => {
+          dySphere = value;
+      });
+
+      gui.add(controls, 'Change in Z (dz/dt)', -1, 1).step(0.1).onChange(value => {
+          dzSphere = value;
+      });
+
+      gui.add(controls, 'Stop Movement'); 
+
+      gui.add(controls, 'Resume Movement'); 
+
+      gui.add(controls, 'Reset Settings'); 
+
+      gui.add(controls, 'Reset Camera'); 
+
+      function stopMovement() {
+        if (stopped == false) {
+          tempdx = dxSphere;
+          tempdy = dySphere;
+          tempdz = dzSphere;
+          dxSphere = 0;
+          dySphere = 0;
+          dzSphere = 0;
+          const guiControls = gui.__controllers; 
+          guiControls.forEach(control => {
+              if (control.property === 'Change in X (dx/dt)') control.setValue(dxSphere);
+              else if (control.property === 'Change in Y (dy/dt)') control.setValue(dySphere);
+              else if (control.property === 'Change in Z (dz/dt)') control.setValue(dzSphere);
+          });
+          stopped = true;
+        }
+      }
+
+      function resumeMovement() {
+        if (stopped == true) {
+          dxSphere = tempdx;
+          dySphere = tempdy;
+          dzSphere = tempdz;
+          const guiControls = gui.__controllers; 
+          guiControls.forEach(control => {
+              if (control.property === 'Change in X (dx/dt)') control.setValue(dxSphere);
+              else if (control.property === 'Change in Y (dy/dt)') control.setValue(dySphere);
+              else if (control.property === 'Change in Z (dz/dt)') control.setValue(dzSphere);
+          }); 
+          stopped = false;
+        }
+      }
+
+      function resetValues() {
+          spherePositionX = 0; 
+          spherePositionY = 0; 
+          spherePositionZ = 0; 
+          dxSphere = 0;
+          dySphere = 0;
+          dzSphere = 0;
+
+          const guiControls = gui.__controllers; 
+          guiControls.forEach(control => {
+              if (control.property === 'Position X') control.setValue(spherePositionX);
+              else if (control.property === 'Position Y') control.setValue(spherePositionY);
+              else if (control.property === 'Position Z') control.setValue(spherePositionZ);
+              else if (control.property === 'Change in X (dx/dt)') control.setValue(dxSphere);
+              else if (control.property === 'Change in Y (dy/dt)') control.setValue(dySphere);
+              else if (control.property === 'Change in Z (dz/dt)') control.setValue(dzSphere);
+          });
+      }
+
+      function resetCamera() { 
+          const defaultCameraPosition = [0, 2, 50];
+          const defaultCameraFocus = [0, 0, 0];
+          camera.goHome(defaultCameraPosition);
+          camera.setFocus(defaultCameraFocus);
+      }
+    }
+  </script>
+</head>
+
+<body>
+
+  <canvas id="webgl-canvas">
+    Your browser does not support the HTML5 canvas element.
+  </canvas>
+
+</body>
+</html>
