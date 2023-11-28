@@ -243,18 +243,19 @@
             mat4.scale(sphereTransform, sphereTransform, [0.05, 0.05, 0.05]);  
           }
           else if (object.alias === 'cone') {
+            // modelView Matrix is the matrix that represents the transformations needed to map vertices to clip space
             const coneTransform = transforms.modelViewMatrix;
 
-            // Calculate the direction the cone is pointing to
+            // Calculate the direction the cone is pointing to from its location
             let sphereLocation = vec3.fromValues(spherePositionX, spherePositionY, spherePositionZ);
             let coneLocation = vec3.fromValues(object.positions[0], object.positions[1], object.positions[2]);
-            const coneDirection = vec3.fromValues(0, 1, 0);
             const direction = vec3.subtract(vec3.create(), sphereLocation, coneLocation);
             vec3.normalize(direction, direction);
 
             // Calculate the axis to rotate the cone
             // Edge case: where the direction is same as original coneDirection
             // cross product would be zero, so set it to (1, 0, 0) instead
+            const coneDirection = vec3.fromValues(0, 1, 0);
             let axis;
             if (direction[0] == 0 && direction[1] == -1 && direction[2] == 0) {
                 axis = vec3.fromValues(1, 0, 0);
